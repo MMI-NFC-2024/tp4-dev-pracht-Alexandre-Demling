@@ -1,21 +1,128 @@
 ---
-import PlotFigure from "../components/PlotFigure.astro";
 import Layout from "../layouts/Layout.astro";
-import * as Plot from "@observablehq/plot";
-import penguins from "../assets/penguins.json";
 ---
-
 <Layout>
-  <h1 class="text-2xl">Test Astro et Plot (Observablehq)</h1>
-  <PlotFigure
-    options={{
-      marks: [
-        Plot.dot(penguins, {
-          x: "culmen_length_mm",
-          y: "culmen_depth_mm",
-          stroke: "species",
-        }),
-      ],
-    }}
-  />
+  <h1 class="text-2xl">Test Astro et Plot (Observablehq) — interactive</h1>
+
+  <div style="display:flex;gap:1rem;align-items:center;margin:1rem 0;">
+    <label>
+      Espèce
+      <select id="species"><option value="">Toutes</option></select>
+    </label>
+
+    <label>
+      Île
+      <select id="island"><option value="">Toutes</option></select>
+    </label>
+
+    <label>
+      Sexe
+      <select id="sex"><option value="">Tous</option></select>
+    </label>
+
+    <button id="reset">Réinitialiser</button>
+  </div>
+
+  <div id="chart" style="min-height:360px;border:1px solid #eee;padding:8px;"></div>
+
+  <!-- Script client -->
+  <script type="module">
+    
+    import * as Plot from "https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6.17/+esm";
+
+    const DATA_URL = "/data/penguins.json"; // 
+    const speciesSelect = document.getElementById("species");
+    const islandSelect  = document.getElementById("island");
+    const sexSelect     = document.getElementById("sex");
+    const chartDiv      = document.getElementById("chart");
+    const resetBtn      = document.getElementById("reset");
+
+    let penguins = [];
+
+    async function loadData() {
+      const res = await fetch(DATA_URL);
+      if (!res.ok) throw new Error(res.status + " " + res.statusText);
+      penguins = await res.json();
+    }
+
+    function uniqueSorted(arr) {
+      return Array.from(new Set(arr.filter(Boolean))).sort();
+    }
+
+    function populateSelect(selectEl, values, firstLabel) {
+      selectEl.innerHTML = "";
+      const opt0 = document.createElement("option");
+      opt0.value = "";
+      opt0.textContent = firstLabel;
+      selectEl.appendChild(opt0);
+      for (const v of values) {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = v;
+        selectEl.appendChild(o);
+      }
+    }
+
+    function makeFilteredData() {
+      const species = speciesSelect.value;
+      const island  = islandSelect.value;
+      const sex     = sexSelect.value;
+      let filtered = penguins;
+      if (species) filtered = filtered.filter(d => d.species === species);
+      if (island)  filtered = filtered.filter(d => d.island === island);
+      if (sex)     filtered = filtered.filter(d => d.sex === sex);
+      return filtered;
+    }
+
+    function renderPlot() {
+      const data = makeFilteredData();
+      chartDiv.innerHTML = ""; // clear
+      if (!data.length) {
+        chartDiv.textContent = "Aucun point à afficher.";
+        return;
+      }
+
+      const plot = Plot.plot({
+        width: 700,
+        height: 500,
+        x: { label: "Culmen length (mm)" },
+        y: { label: "Culmen depth (mm)" },
+        marks: [
+          Plot.dot(data, {
+            x: "culmen_length_mm",
+            y: "culmen_depth_mm",
+            stroke: "species",
+            r: 4,
+            title: d => `${d.species} — ${d.island} — ${d.sex}`
+          }),
+        ],
+      });
+      chartDiv.appendChild(plot);
+    }
+
+    async function init() {
+      await loadData();
+
+      populateSelect(speciesSelect, uniqueSorted(penguins.map(p => p.species)), "Toutes les espèces");
+      populateSelect(islandSelect,  uniqueSorted(penguins.map(p => p.island)),  "Toutes les îles");
+      populateSelect(sexSelect,     uniqueSorted(penguins.map(p => p.sex)),     "Tous les sexes");
+
+      speciesSelect.addEventListener("change", renderPlot);
+      islandSelect.addEventListener("change", renderPlot);
+      sexSelect.addEventListener("change", renderPlot);
+      resetBtn.addEventListener("click", () => {
+        speciesSelect.value = "";
+        islandSelect.value = "";
+        sexSelect.value = "";
+        renderPlot();
+      });
+
+      renderPlot();
+    }
+
+    init().catch(err => {
+      console.error("Erreur init:", err);
+      chartDiv.textContent = "Erreur : " + err.message;
+    });
+  </script>
 </Layout>
